@@ -1,0 +1,439 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["metrica"]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+enum RolUsuario {
+  SECRETARIA
+  ASISTENTE_DESPACHO
+  LIDER_AREA
+  LIDER_COMPONENTE
+  FUNCIONARIO
+  CONTRATISTA
+  ADMINISTRADOR
+
+  @@map("rol_usuario")
+  @@schema("metrica")
+}
+
+enum EstadoMeta {
+  PENDIENTE_COMPLETAR
+  ABIERTA
+  CUMPLIDA
+  CERRADA_SIN_CUMPLIR
+
+  @@map("estado_meta")
+  @@schema("metrica")
+}
+
+enum OrigenReporte {
+  CARGA_INICIAL
+  MANUAL
+  CORRECCION
+
+  @@map("origen_reporte")
+  @@schema("metrica")
+}
+
+enum EstadoTarea {
+  PROGRAMADA
+  EN_CURSO
+  VENCIDA
+  FINALIZADA
+  CANCELADA
+
+  @@map("estado_tarea")
+  @@schema("metrica")
+}
+
+enum EstadoPresencia {
+  PENDIENTE
+  CONFIRMADA
+  DECLINADA
+
+  @@map("estado_presencia")
+  @@schema("metrica")
+}
+
+enum TipoParametro {
+  texto
+  numero
+  fecha
+  booleano
+  json
+
+  @@map("tipo_parametro")
+  @@schema("metrica")
+}
+
+model Area {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo         String       @unique @db.VarChar(20)
+  nombre         String       @db.VarChar(120)
+  liderId        String?      @map("lider_id") @db.Uuid
+  activo         Boolean      @default(true)
+  creadoEn       DateTime     @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn  DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  lider          Usuario?     @relation("AreaLider", fields: [liderId], references: [id])
+  componentes    Componente[]
+  usuarios       Usuario[]    @relation("AreaUsuarios")
+  metas          Meta[]
+
+  @@map("area")
+  @@schema("metrica")
+}
+
+model Componente {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  areaId         String       @map("area_id") @db.Uuid
+  codigo         String       @db.VarChar(20)
+  nombre         String       @db.VarChar(120)
+  liderId        String?      @map("lider_id") @db.Uuid
+  activo         Boolean      @default(true)
+  creadoEn       DateTime     @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn  DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  area           Area         @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  lider          Usuario?     @relation("ComponenteLider", fields: [liderId], references: [id])
+  usuarios       Usuario[]    @relation("ComponenteUsuarios")
+  metas          Meta[]
+
+  @@unique([areaId, codigo])
+  @@map("componente")
+  @@schema("metrica")
+}
+
+model Usuario {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre              String         @db.VarChar(150)
+  correo              String         @unique @db.VarChar(150)
+  hashClave           String         @map("hash_clave") @db.VarChar(255)
+  rol                 RolUsuario
+  areaId              String         @map("area_id") @db.Uuid
+  componenteId        String?        @map("componente_id") @db.Uuid
+  cargo               String?        @db.VarChar(120)
+  fechaFinContrato    DateTime?      @map("fecha_fin_contrato") @db.Date
+  activo              Boolean        @default(true)
+  recibeCorreo        Boolean        @default(true) @map("recibe_correo")
+  ultimoAcceso        DateTime?      @map("ultimo_acceso") @db.Timestamptz
+  tokenRecuperacion   String?        @map("token_recuperacion") @db.VarChar(255)
+  tokenExpira         DateTime?      @map("token_expira") @db.Timestamptz
+  esDatoPrueba        Boolean        @default(false) @map("es_dato_prueba")
+  creadoEn            DateTime       @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime       @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  area                Area           @relation("AreaUsuarios", fields: [areaId], references: [id])
+  componente          Componente?    @relation("ComponenteUsuarios", fields: [componenteId], references: [id])
+  areasLideradas      Area[]         @relation("AreaLider")
+  componentesLiderados Componente[]  @relation("ComponenteLider")
+  metasResponsable    Meta[]         @relation("MetaResponsable")
+  reportes            ReporteMensual[]
+  tareasResponsable   Tarea[]        @relation("TareaResponsable")
+  observaciones       Observacion[]  @relation("ObservacionAutor")
+  notificaciones      Notificacion[]
+
+  @@map("usuario")
+  @@schema("metrica")
+}
+
+model UnidadMedida {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String   @unique @db.VarChar(20)
+  nombre      String   @db.VarChar(60)
+  esBinaria   Boolean  @default(false) @map("es_binaria")
+  activo      Boolean  @default(true)
+
+  metas       Meta[]
+
+  @@map("unidad_medida")
+  @@schema("metrica")
+}
+
+model PoblacionSujeto {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre      String   @unique @db.Text
+  activo      Boolean  @default(true)
+
+  metas       Meta[]
+
+  @@map("poblacion_sujeto")
+  @@schema("metrica")
+}
+
+model FuenteRecurso {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String   @unique @db.VarChar(50)
+  nombre      String   @db.Text
+  activo      Boolean  @default(true)
+
+  metas       Meta[]
+
+  @@map("fuente_recurso")
+  @@schema("metrica")
+}
+
+model Recurso {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre      String         @unique @db.VarChar(120)
+  activo      Boolean        @default(true)
+
+  tareas      TareaRecurso[]
+
+  @@map("recurso")
+  @@schema("metrica")
+}
+
+model CategoriaTarea {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre      String   @unique @db.VarChar(120)
+  activo      Boolean  @default(true)
+
+  tareas      Tarea[]
+
+  @@map("categoria_tarea")
+  @@schema("metrica")
+}
+
+model Meta {
+  id                      String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo                  String             @unique @db.VarChar(20)
+  descripcion             String             @db.Text
+  unidadId                String             @map("unidad_id") @db.Uuid
+  valorMeta               Decimal            @map("valor_meta") @db.Decimal(14, 2)
+  fechaInicio             DateTime           @map("fecha_inicio") @db.Date
+  fechaFinOficial         DateTime           @map("fecha_fin_oficial") @db.Date
+  fechaCorte              DateTime           @map("fecha_corte") @db.Date
+  areaId                  String             @map("area_id") @db.Uuid
+  componenteId            String?            @map("componente_id") @db.Uuid
+  responsableId           String?            @map("responsable_id") @db.Uuid
+  fuenteRecursoId         String?            @map("fuente_recurso_id") @db.Uuid
+  presupuestoProgramado   Decimal?           @map("presupuesto_programado") @db.Decimal(16, 2)
+  poblacionSujetoId       String?            @map("poblacion_sujeto_id") @db.Uuid
+  estado                  EstadoMeta         @default(PENDIENTE_COMPLETAR)
+  distribucionUniforme    Boolean            @default(true) @map("distribucion_uniforme")
+  observacionesImportacion String?           @map("observaciones_importacion") @db.Text
+  esDatoPrueba            Boolean            @default(false) @map("es_dato_prueba")
+  creadoEn                DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn           DateTime           @updatedAt @map("actualizado_en") @db.Timestamptz
+  creadoPor               String?            @map("creado_por") @db.Uuid
+  actualizadoPor          String?            @map("actualizado_por") @db.Uuid
+
+  unidad                  UnidadMedida       @relation(fields: [unidadId], references: [id])
+  area                    Area               @relation(fields: [areaId], references: [id])
+  componente              Componente?        @relation(fields: [componenteId], references: [id])
+  responsable             Usuario?           @relation("MetaResponsable", fields: [responsableId], references: [id])
+  fuenteRecurso           FuenteRecurso?     @relation(fields: [fuenteRecursoId], references: [id])
+  poblacionSujeto         PoblacionSujeto?   @relation(fields: [poblacionSujetoId], references: [id])
+  programaciones          ProgramacionMeta[]
+  reportes                ReporteMensual[]
+  tareas                  Tarea[]
+  observaciones           Observacion[]
+
+  @@index([areaId, componenteId, estado])
+  @@index([responsableId])
+  @@index([codigo])
+  @@map("meta")
+  @@schema("metrica")
+}
+
+model ProgramacionMeta {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  metaId           String   @map("meta_id") @db.Uuid
+  anio             Int      @db.SmallInt
+  mes              Int      @db.SmallInt
+  valorProgramado  Decimal  @map("valor_programado") @db.Decimal(14, 2)
+
+  meta             Meta     @relation(fields: [metaId], references: [id], onDelete: Cascade)
+
+  @@unique([metaId, anio, mes])
+  @@map("programacion_meta")
+  @@schema("metrica")
+}
+
+model ReporteMensual {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  metaId            String         @map("meta_id") @db.Uuid
+  anio              Int            @db.SmallInt
+  mes               Int            @db.SmallInt
+  valorEjecutado    Decimal        @default(0) @map("valor_ejecutado") @db.Decimal(14, 2)
+  costoEjecutado    Decimal        @default(0) @map("costo_ejecutado") @db.Decimal(16, 2)
+  porcentajeBinario Decimal?       @map("porcentaje_binario") @db.Decimal(5, 2)
+  observacion       String?        @db.Text
+  origen            OrigenReporte  @default(MANUAL)
+  reportadoPor      String         @map("reportado_por") @db.Uuid
+  reportadoEn       DateTime       @default(now()) @map("reportado_en") @db.Timestamptz
+  esDatoPrueba      Boolean        @default(false) @map("es_dato_prueba")
+
+  meta              Meta           @relation(fields: [metaId], references: [id], onDelete: Cascade)
+  usuario           Usuario        @relation(fields: [reportadoPor], references: [id])
+  soportes          Soporte[]
+
+  @@unique([metaId, anio, mes])
+  @@map("reporte_mensual")
+  @@schema("metrica")
+}
+
+model Tarea {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  metaId              String           @map("meta_id") @db.Uuid
+  titulo              String           @db.VarChar(200)
+  descripcion         String?          @db.Text
+  fase                String?          @db.VarChar(80)
+  categoriaId         String?          @map("categoria_id") @db.Uuid
+  responsableId       String           @map("responsable_id") @db.Uuid
+  fechaInicio         DateTime         @map("fecha_inicio") @db.Date
+  fechaFin            DateTime         @map("fecha_fin") @db.Date
+  horaInicio          String?          @map("hora_inicio") @db.VarChar(8)
+  horaFin             String?          @map("hora_fin") @db.VarChar(8)
+  lugar               String?          @db.VarChar(150)
+  requiereSecretaria  Boolean          @default(false) @map("requiere_secretaria")
+  estadoPresencia     EstadoPresencia? @map("estado_presencia")
+  motivoDeclinacion   String?          @map("motivo_declinacion") @db.Text
+  estado              EstadoTarea      @default(PROGRAMADA)
+  finalizadaEn        DateTime?        @map("finalizada_en") @db.Timestamptz
+  finalizadaPor       String?          @map("finalizada_por") @db.Uuid
+  observacionCierre   String?          @map("observacion_cierre") @db.Text
+  reabiertaEn         DateTime?        @map("reabierta_en") @db.Timestamptz
+  reabiertaPor        String?          @map("reabierta_por") @db.Uuid
+  motivoReapertura    String?          @map("motivo_reapertura") @db.Text
+  creadoPor           String?          @map("creado_por") @db.Uuid
+  esDatoPrueba        Boolean          @default(false) @map("es_dato_prueba")
+  creadoEn            DateTime         @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime         @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  meta                Meta             @relation(fields: [metaId], references: [id], onDelete: Cascade)
+  responsable         Usuario          @relation("TareaResponsable", fields: [responsableId], references: [id])
+  categoria           CategoriaTarea?  @relation(fields: [categoriaId], references: [id])
+  recursos            TareaRecurso[]
+  soportes            Soporte[]
+  observaciones       Observacion[]
+
+  @@index([responsableId, fechaInicio, fechaFin])
+  @@index([metaId, estado])
+  @@index([requiereSecretaria, estadoPresencia])
+  @@map("tarea")
+  @@schema("metrica")
+}
+
+model TareaRecurso {
+  tareaId   String   @map("tarea_id") @db.Uuid
+  recursoId String   @map("recurso_id") @db.Uuid
+  cantidad  Int      @default(1) @db.SmallInt
+  nota      String?  @db.VarChar(150)
+
+  tarea     Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  recurso   Recurso  @relation(fields: [recursoId], references: [id], onDelete: Cascade)
+
+  @@id([tareaId, recursoId])
+  @@map("tarea_recurso")
+  @@schema("metrica")
+}
+
+model Soporte {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tareaId          String?         @map("tarea_id") @db.Uuid
+  reporteId        String?         @map("reporte_id") @db.Uuid
+  nombreOriginal   String          @map("nombre_original") @db.VarChar(255)
+  nombreAlmacenado String          @map("nombre_almacenado") @db.VarChar(255)
+  ruta             String          @db.VarChar(500)
+  tipoMime         String          @map("tipo_mime") @db.VarChar(100)
+  tamanoBytes      BigInt          @map("tamano_bytes")
+  subidoPor        String?         @map("subido_por") @db.Uuid
+  subidoEn         DateTime        @default(now()) @map("subido_en") @db.Timestamptz
+
+  tarea            Tarea?          @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  reporte          ReporteMensual? @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+
+  @@map("soporte")
+  @@schema("metrica")
+}
+
+model Observacion {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  metaId      String?   @map("meta_id") @db.Uuid
+  tareaId     String?   @map("tarea_id") @db.Uuid
+  texto       String    @db.Text
+  autorId     String    @map("autor_id") @db.Uuid
+  atendida    Boolean   @default(false)
+  respuesta   String?   @db.Text
+  atendidaPor String?   @map("atendida_por") @db.Uuid
+  atendidaEn  DateTime? @map("atendida_en") @db.Timestamptz
+  creadoEn    DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+
+  meta        Meta?     @relation(fields: [metaId], references: [id], onDelete: Cascade)
+  tarea       Tarea?    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  autor       Usuario   @relation("ObservacionAutor", fields: [autorId], references: [id])
+
+  @@map("observacion")
+  @@schema("metrica")
+}
+
+model TipoNotificacion {
+  codigo         String         @id @db.VarChar(50)
+  nombre         String         @db.VarChar(120)
+  descripcion    String         @db.Text
+  esAlerta       Boolean        @default(false) @map("es_alerta")
+  enviaCorreo    Boolean        @default(false) @map("envia_correo")
+
+  notificaciones Notificacion[]
+
+  @@map("tipo_notificacion")
+  @@schema("metrica")
+}
+
+model Notificacion {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId      String           @map("usuario_id") @db.Uuid
+  tipoCodigo     String           @map("tipo_codigo") @db.VarChar(50)
+  titulo         String           @db.VarChar(200)
+  mensaje        String           @db.Text
+  enlace         String?          @db.VarChar(300)
+  leida          Boolean          @default(false)
+  leidaEn        DateTime?        @map("leida_en") @db.Timestamptz
+  correoEnviado  Boolean          @default(false) @map("correo_enviado")
+  correoError    String?          @map("correo_error") @db.Text
+  creadaEn       DateTime         @default(now()) @map("creada_en") @db.Timestamptz
+
+  usuario        Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo           TipoNotificacion @relation(fields: [tipoCodigo], references: [codigo])
+
+  @@index([usuarioId, leida, creadaEn(sort: Desc)])
+  @@map("notificacion")
+  @@schema("metrica")
+}
+
+model Parametro {
+  clave       String        @id @db.VarChar(60)
+  valor       String        @db.Text
+  tipo        TipoParametro
+  descripcion String        @db.Text
+  editable    Boolean       @default(true)
+
+  @@map("parametro")
+  @@schema("metrica")
+}
+
+model Auditoria {
+  id           BigInt    @id @default(autoincrement())
+  fecha        DateTime  @default(now()) @db.Timestamptz
+  usuarioId    String?   @map("usuario_id") @db.Uuid
+  accion       String    @db.VarChar(60)
+  entidad      String    @db.VarChar(60)
+  entidadId    String?   @map("entidad_id") @db.Uuid
+  datosAntes   Json?     @map("datos_antes")
+  datosDespues Json?     @map("datos_despues")
+  motivo       String?   @db.Text
+  ip           String?   @db.VarChar(45)
+
+  @@index([entidad, entidadId])
+  @@index([fecha(sort: Desc)])
+  @@map("auditoria")
+  @@schema("metrica")
+}
