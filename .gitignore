@@ -14,8 +14,8 @@ pnpm-debug.log*
 apps/api/prisma/migrations/migration_lock.toml
 
 # Uploads y archivos locales
-soportes/
-backups/
+/soportes/
+/backups/
 temp/
 *.zip
 *.dump
