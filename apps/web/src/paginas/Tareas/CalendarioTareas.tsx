@@ -84,6 +84,10 @@ export const CalendarioTareas: React.FC = () => {
     const fechaStr = `${anio}-${mesFormateado}-${diaFormateado}`;
     celdas.push({ dia: d, fechaStr });
   }
+  // Rellenar días del mes siguiente para completar la cuadrícula regular
+  while (celdas.length % 7 !== 0) {
+    celdas.push({ dia: null, fechaStr: '' });
+  }
 
   const hoyStr = new Date().toISOString().slice(0, 10);
 
@@ -118,7 +122,7 @@ export const CalendarioTareas: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Encabezado y Navegación */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-xs">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <div className="p-2 bg-blue-50 text-institucional-azul rounded-xl">
@@ -145,7 +149,7 @@ export const CalendarioTareas: React.FC = () => {
       </div>
 
       {/* Leyenda de Colores (RN-30) */}
-      <div className="flex flex-wrap items-center gap-4 bg-white px-5 py-3 rounded-xl border border-slate-200/80 text-xs text-slate-600 shadow-2xs">
+      <div className="flex flex-wrap items-center gap-4 bg-white px-5 py-3 rounded-xl border-2 border-slate-200 text-xs text-slate-600 shadow-2xs">
         <span className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Leyenda:</span>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full bg-blue-500 inline-block shadow-2xs" />
@@ -169,12 +173,12 @@ export const CalendarioTareas: React.FC = () => {
         </div>
       </div>
 
-      {/* Grilla Mensual con bordes redondeados y separación entre días (Observación 9) */}
-      <div className="bg-slate-100/60 p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+      {/* Grilla Mensual con bordes nítidos, visibles y permanentes en TODOS los días */}
+      <div className="bg-slate-100/80 p-3 sm:p-4 rounded-2xl border-2 border-slate-300 shadow-sm">
         {/* Cabecera de días de la semana */}
-        <div className="grid grid-cols-7 gap-2 sm:gap-2.5 mb-2.5 text-center text-xs font-bold text-slate-600 uppercase tracking-wider">
+        <div className="grid grid-cols-7 gap-2 sm:gap-2.5 mb-2.5 text-center text-xs font-bold text-slate-700 uppercase tracking-wider">
           {DIAS_SEMANA.map((d) => (
-            <div key={d} className="py-2 rounded-lg bg-white/80 border border-slate-200/60 text-[11px]">
+            <div key={d} className="py-2.5 rounded-xl bg-white border-2 border-slate-300 text-[11px] shadow-2xs font-bold text-slate-700">
               {d}
             </div>
           ))}
@@ -182,7 +186,7 @@ export const CalendarioTareas: React.FC = () => {
 
         {/* Celdas del mes */}
         {cargando ? (
-          <div className="bg-white rounded-2xl p-16 text-center text-slate-500 border border-slate-200">
+          <div className="bg-white rounded-2xl p-16 text-center text-slate-500 border-2 border-slate-300">
             <div className="animate-spin w-8 h-8 border-4 border-institucional-azul border-t-transparent rounded-full mx-auto mb-3" />
             <p className="text-sm font-medium">Cargando eventos del mes...</p>
           </div>
@@ -193,7 +197,7 @@ export const CalendarioTareas: React.FC = () => {
                 return (
                   <div
                     key={idx}
-                    className="bg-slate-200/30 rounded-xl border border-dashed border-slate-200/60 min-h-[125px] p-2 opacity-60"
+                    className="bg-slate-200/40 rounded-xl border-2 border-dashed border-slate-300 min-h-[125px] p-2 opacity-60"
                   />
                 );
               }
@@ -207,25 +211,25 @@ export const CalendarioTareas: React.FC = () => {
               return (
                 <div
                   key={idx}
-                  className={`min-h-[125px] p-2.5 rounded-xl border transition-all flex flex-col justify-between ${
+                  className={`min-h-[125px] p-2.5 rounded-xl border-2 transition-all flex flex-col justify-between ${
                     esHoy
-                      ? 'bg-gradient-to-b from-blue-50/90 to-white border-institucional-azul/40 ring-2 ring-institucional-azul/20 shadow-xs'
-                      : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
+                      ? 'bg-gradient-to-b from-blue-50 to-white border-institucional-azul ring-2 ring-institucional-azul/25 shadow-sm'
+                      : 'bg-white border-slate-300 hover:border-slate-400 hover:shadow-xs'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-100">
                       <span
                         className={`text-xs font-mono font-bold w-6 h-6 flex items-center justify-center rounded-full ${
                           esHoy
                             ? 'bg-institucional-azul text-white shadow-2xs'
-                            : 'text-slate-700 bg-slate-100'
+                            : 'text-slate-800 bg-slate-100 border border-slate-200'
                         }`}
                       >
                         {celda.dia}
                       </span>
                       {tareasDelDia.length > 0 && (
-                        <span className="text-[10px] text-slate-400 font-semibold px-1.5 py-0.5 bg-slate-100 rounded-md">
+                        <span className="text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded-md">
                           {tareasDelDia.length}
                         </span>
                       )}
