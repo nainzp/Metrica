@@ -1,0 +1,25 @@
+{
+  "name": "metrica",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MÉTRICA — Monitoreo y Evaluación de Targets, Resultados e Indicadores para el Cumplimiento de Acciones",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace=apps/api run start:dev",
+    "dev:web": "npm --workspace=apps/web run dev",
+    "dev": "npm run dev:api",
+    "build": "npm --workspace=apps/api run build && npm --workspace=apps/web run build",
+    "test": "npm --workspace=apps/api run test"
+  },
+  "keywords": [
+    "metrica",
+    "salud",
+    "magdalena",
+    "indicadores",
+    "metas"
+  ],
+  "author": "INGNOVATICS Consultores S.A.S.",
+  "license": "UNLICENSED"
+}
