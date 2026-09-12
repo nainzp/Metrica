@@ -1,4 +1,5 @@
 import { IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class FiltrosTableroDto {
   @IsString()
@@ -8,4 +9,8 @@ export class FiltrosTableroDto {
   @IsString()
   @IsOptional()
   componenteId?: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  mes?: number;
 }

@@ -13,11 +13,16 @@ export class ExportacionController {
   async exportarMetasExcel(
     @Query('areaId') areaId: string,
     @Query('componenteId') componenteId: string,
+    @Query('mes') mes: string,
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Res() res: Response,
   ) {
     return this.exportacionService.exportarMetasExcel(
-      { areaId: areaId || undefined, componenteId: componenteId || undefined },
+      {
+        areaId: areaId || undefined,
+        componenteId: componenteId || undefined,
+        mes: mes ? Number(mes) : undefined,
+      },
       usuario,
       res,
     );

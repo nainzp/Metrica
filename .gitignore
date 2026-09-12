@@ -30,3 +30,4 @@ temp/
 *.sw?
 .DS_Store
 Thumbs.db
+~$*

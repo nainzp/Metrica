@@ -99,13 +99,18 @@ export class MetasService {
       tareasCanceladas,
     );
 
-    // Último mes reportado
+    // Último mes reportado (hasta la fecha de referencia)
     let ultimoMesReportado: { anio: number; mes: number } | null = null;
     if (meta.reportes && meta.reportes.length > 0) {
-      const ordenados = [...meta.reportes].sort((a, b) =>
-        a.anio !== b.anio ? b.anio - a.anio : b.mes - a.mes,
+      const reportesHastaFecha = meta.reportes.filter(
+        (r: any) => r.anio < anioActual || (r.anio === anioActual && r.mes <= mesActual),
       );
-      ultimoMesReportado = { anio: ordenados[0].anio, mes: ordenados[0].mes };
+      if (reportesHastaFecha.length > 0) {
+        const ordenados = [...reportesHastaFecha].sort((a, b) =>
+          a.anio !== b.anio ? b.anio - a.anio : b.mes - a.mes,
+        );
+        ultimoMesReportado = { anio: ordenados[0].anio, mes: ordenados[0].mes };
+      }
     }
 
     // Observaciones pendientes
@@ -155,6 +160,7 @@ export class MetasService {
       sinReporte?: boolean;
       pagina?: number;
       tamano?: number;
+      mes?: number;
     },
     usuario: UsuarioAutenticado,
   ) {
@@ -209,7 +215,10 @@ export class MetasService {
       }),
     ]);
 
-    const hoy = obtenerHoyBogota();
+    const hoy =
+      filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
+        ? new Date(Date.UTC(2026, Number(filtros.mes), 0, 23, 59, 59, 999))
+        : obtenerHoyBogota();
     let metasEnriquecidas = metasDb.map((m) => this.enriquecerMeta(m, hoy));
 
     if (filtros.semaforo) {
@@ -220,10 +229,11 @@ export class MetasService {
 
     if (filtros.sinReporte) {
       const mesActual = hoy.getUTCMonth() + 1;
+      const anioActual = hoy.getUTCFullYear();
       metasEnriquecidas = metasEnriquecidas.filter(
         (m) =>
           m.estado === 'ABIERTA' &&
-          (!m.ultimoMesReportado || m.ultimoMesReportado.mes < mesActual),
+          !m.reportes?.some((r: any) => r.anio === anioActual && r.mes === mesActual),
       );
     }
 

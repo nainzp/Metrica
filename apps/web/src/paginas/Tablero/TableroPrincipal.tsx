@@ -40,12 +40,28 @@ import { AnilloAvance } from '../../componentes/ui/AnilloAvance';
 import { SemaforoBadge } from '../../componentes/ui/SemaforoBadge';
 import { Boton } from '../../componentes/ui/Boton';
 
+const MESES = [
+  { id: 1, nombre: 'Enero' },
+  { id: 2, nombre: 'Febrero' },
+  { id: 3, nombre: 'Marzo' },
+  { id: 4, nombre: 'Abril' },
+  { id: 5, nombre: 'Mayo' },
+  { id: 6, nombre: 'Junio' },
+  { id: 7, nombre: 'Julio' },
+  { id: 8, nombre: 'Agosto' },
+  { id: 9, nombre: 'Septiembre' },
+  { id: 10, nombre: 'Octubre' },
+  { id: 11, nombre: 'Noviembre (Corte)' },
+  { id: 12, nombre: 'Diciembre' },
+];
+
 export const TableroPrincipal: React.FC = () => {
   const { usuario } = useSesion();
 
   // Filtros de navegación
   const [areaId, setAreaId] = useState<string>('');
   const [componenteId, setComponenteId] = useState<string>('');
+  const [mes, setMes] = useState<number | ''>('');
   const [modoPresentacion, setModoPresentacion] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
   const [pestanaAlertas, setPestanaAlertas] = useState<'rojas' | 'sinReporte' | 'sobrecosto' | 'vencidas'>('rojas');
@@ -53,11 +69,12 @@ export const TableroPrincipal: React.FC = () => {
 
   // 1. Consulta del Resumen Ejecutivo (CU-11, RN-09, RN-10)
   const { data: resumen, isLoading: cargandoResumen, refetch: refetchResumen } = useQuery({
-    queryKey: ['tablero-resumen', areaId, componenteId],
+    queryKey: ['tablero-resumen', areaId, componenteId, mes],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
+      if (mes) params.append('mes', String(mes));
       const { data } = await api.get(`/tablero/resumen?${params.toString()}`);
       return data;
     },
@@ -65,11 +82,12 @@ export const TableroPrincipal: React.FC = () => {
 
   // 2. Consulta de la Curva de Avance 12 Meses (CU-11, 6.6)
   const { data: curva = [], isLoading: cargandoCurva } = useQuery({
-    queryKey: ['tablero-curva', areaId, componenteId],
+    queryKey: ['tablero-curva', areaId, componenteId, mes],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
+      if (mes) params.append('mes', String(mes));
       const { data } = await api.get(`/tablero/curva?${params.toString()}`);
       return Array.isArray(data) ? data : [];
     },
@@ -77,20 +95,23 @@ export const TableroPrincipal: React.FC = () => {
 
   // 3. Consulta de Desglose por Áreas y Componentes
   const { data: desgloseAreas = [], isLoading: cargandoDesglose } = useQuery({
-    queryKey: ['tablero-desglose-areas'],
+    queryKey: ['tablero-desglose-areas', mes],
     queryFn: async () => {
-      const { data } = await api.get('/tablero/desglose-areas');
+      const params = new URLSearchParams();
+      if (mes) params.append('mes', String(mes));
+      const { data } = await api.get(`/tablero/desglose-areas?${params.toString()}`);
       return Array.isArray(data) ? data : [];
     },
   });
 
   // 4. Consulta de Alertas Críticas (CU-11)
   const { data: alertas, isLoading: cargandoAlertas } = useQuery({
-    queryKey: ['tablero-alertas-criticas', areaId, componenteId],
+    queryKey: ['tablero-alertas-criticas', areaId, componenteId, mes],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
+      if (mes) params.append('mes', String(mes));
       const { data } = await api.get(`/tablero/alertas-criticas?${params.toString()}`);
       return data;
     },
@@ -107,7 +128,11 @@ export const TableroPrincipal: React.FC = () => {
   const handleDescargarExcel = async () => {
     try {
       setExportandoExcel(true);
-      const response = await api.get('/exportacion/metas/excel', {
+      const params = new URLSearchParams();
+      if (areaId) params.append('areaId', areaId);
+      if (componenteId) params.append('componenteId', componenteId);
+      if (mes) params.append('mes', String(mes));
+      const response = await api.get(`/exportacion/metas/excel?${params.toString()}`, {
         responseType: 'blob',
       });
       const blob = new Blob([response.data], {
@@ -116,7 +141,8 @@ export const TableroPrincipal: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `METRICA_Matriz_Metas_2026_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const sufijoMes = mes ? `_Mes${mes}` : '';
+      link.setAttribute('download', `METRICA_Matriz_Metas_2026${sufijoMes}_${new Date().toISOString().slice(0, 10)}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -147,13 +173,23 @@ export const TableroPrincipal: React.FC = () => {
       {/* BARRA SUPERIOR DE ACCIONES Y FILTROS */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className={`text-2xl lg:text-3xl font-black tracking-tight ${modoPresentacion ? 'text-white' : 'text-slate-900'}`}>
               Tablero de Control Gerencial
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-institucional-azul/10 text-institucional-azul border border-institucional-azul/20">
               Vigencia 2026
             </span>
+            {mes ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1 shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                Corte: {MESES.find((m) => m.id === mes)?.nombre} 2026
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                Acumulado a la fecha
+              </span>
+            )}
           </div>
           <p className={`text-xs sm:text-sm mt-1 ${modoPresentacion ? 'text-slate-400' : 'text-slate-500'}`}>
             Monitoreo en tiempo real del Plan de Acción en Salud (PAS) · Secretaría de Salud Departamental
@@ -162,6 +198,27 @@ export const TableroPrincipal: React.FC = () => {
 
         {/* Controles de Vista y Descarga */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Selector de Mes */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={mes}
+              onChange={(e) => setMes(e.target.value ? Number(e.target.value) : '')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all ${
+                modoPresentacion
+                  ? 'bg-slate-800 text-white border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}
+              title="Filtrar avance y presupuesto por mes de reporte"
+            >
+              <option value="">Todo el Año (A la fecha)</option>
+              {MESES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  Mes {m.id} - {m.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Selector de Área */}
           <select
             value={areaId}
@@ -231,25 +288,25 @@ export const TableroPrincipal: React.FC = () => {
         </div>
       </div>
 
-      {/* TARJETAS KPI DE ALTO NIVEL (RN-09, RN-10, CU-11) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* TARJETAS KPI DE ALTO NIVEL CON PRESUPUESTO PROGRAMADO Y EJECUTADO (RN-09, RN-10, CU-11) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* KPI 1: Avance Físico Global (Promedio Simple RN-09/RN-10) */}
         <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Avance Físico Global (RN-09)
+              Avance Físico (RN-09)
             </span>
             <SemaforoBadge
               color={resumen?.semaforoGlobal || 'VERDE'}
               tamano="sm"
             />
           </div>
-          <div className="mt-3 flex items-baseline gap-3">
-            <span className="text-3xl lg:text-4xl font-black font-mono tracking-tight text-institucional-azul">
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-black font-mono tracking-tight text-institucional-azul">
               {resumen?.avanceGlobalFisico != null ? `${resumen.avanceGlobalFisico.toFixed(1)}%` : '—'}
             </span>
             <div className="text-xs">
-              <span className="text-slate-400">Planeado: </span>
+              <span className="text-slate-400">Plan: </span>
               <span className={`font-bold ${modoPresentacion ? 'text-slate-300' : 'text-slate-600'}`}>
                 {resumen?.avanceGlobalPlaneado != null ? `${resumen.avanceGlobalPlaneado.toFixed(1)}%` : '—'}
               </span>
@@ -263,7 +320,7 @@ export const TableroPrincipal: React.FC = () => {
             >
               {(resumen?.brecha || 0) >= 0 ? `+${resumen?.brecha}%` : `${resumen?.brecha}%`}
             </span>
-            <span className="text-slate-400">brecha vs curva esperada</span>
+            <span className="text-slate-400">brecha vs curva</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">
             <div
@@ -279,32 +336,95 @@ export const TableroPrincipal: React.FC = () => {
           </div>
         </Tarjeta>
 
-        {/* KPI 2: Distribución de Semáforos */}
+        {/* KPI 2: Presupuesto Total Programado */}
         <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Distribución de Semáforos
+              Presupuesto Programado
             </span>
-            <span className="text-xs font-semibold text-slate-400">
-              {resumen?.distribucionEstados?.total || 276} metas
+            <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+              <DollarSign className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span
+              className={`text-xl sm:text-2xl font-black font-mono tracking-tight block truncate ${modoPresentacion ? 'text-white' : 'text-slate-900'}`}
+              title={formatMoneda(resumen?.financiero?.totalPresupuestoProgramado ?? resumen?.financiero?.totalPresupuesto ?? 0)}
+            >
+              {formatMoneda(resumen?.financiero?.totalPresupuestoProgramado ?? resumen?.financiero?.totalPresupuesto ?? 0)}
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded-xl bg-emerald-50/80 border border-emerald-100">
-              <span className="text-[10px] font-bold text-emerald-700 uppercase block">Verde</span>
-              <span className="text-xl font-black text-emerald-800 block">
+          <div className="mt-2 text-xs flex items-center justify-between text-slate-400">
+            <span>Apropiación Vigencia 2026</span>
+            <span className="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px]">
+              100% Plan
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">
+            {resumen?.distribucionEstados?.total || 0} metas formuladas
+          </p>
+        </Tarjeta>
+
+        {/* KPI 3: Presupuesto Ejecutado */}
+        <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Presupuesto Ejecutado
+            </span>
+            <div className="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <TrendingUp className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span
+              className={`text-xl sm:text-2xl font-black font-mono tracking-tight block truncate text-emerald-600`}
+              title={formatMoneda(resumen?.financiero?.totalPresupuestoEjecutado ?? resumen?.financiero?.totalCostoEjecutado ?? 0)}
+            >
+              {formatMoneda(resumen?.financiero?.totalPresupuestoEjecutado ?? resumen?.financiero?.totalCostoEjecutado ?? 0)}
+            </span>
+          </div>
+          <div className="mt-2 text-xs flex items-center justify-between">
+            <span className="text-slate-400">
+              {mes ? `Corte: ${MESES.find((m) => m.id === mes)?.nombre}` : 'A la fecha'}
+            </span>
+            <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-mono">
+              {resumen?.financiero?.porcentajeEjecucion != null ? `${resumen.financiero.porcentajeEjecucion}%` : '0%'} ejec.
+            </span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+              style={{ width: `${Math.min(resumen?.financiero?.porcentajeEjecucion || 0, 100)}%` }}
+            />
+          </div>
+        </Tarjeta>
+
+        {/* KPI 4: Distribución de Semáforos */}
+        <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Semáforos de Metas
+            </span>
+            <span className="text-xs font-semibold text-slate-400">
+              {resumen?.distribucionEstados?.total || 0} metas
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+            <div className="p-1.5 rounded-lg bg-emerald-50/80 border border-emerald-100">
+              <span className="text-[9px] font-bold text-emerald-700 uppercase block">Verde</span>
+              <span className="text-lg font-black text-emerald-800 block">
                 {resumen?.distribucionSemaforos?.verde ?? 0}
               </span>
             </div>
-            <div className="p-2 rounded-xl bg-amber-50/80 border border-amber-100">
-              <span className="text-[10px] font-bold text-amber-700 uppercase block">Amarillo</span>
-              <span className="text-xl font-black text-amber-800 block">
+            <div className="p-1.5 rounded-lg bg-amber-50/80 border border-amber-100">
+              <span className="text-[9px] font-bold text-amber-700 uppercase block">Amarillo</span>
+              <span className="text-lg font-black text-amber-800 block">
                 {resumen?.distribucionSemaforos?.amarillo ?? 0}
               </span>
             </div>
-            <div className="p-2 rounded-xl bg-rose-50/80 border border-rose-100">
-              <span className="text-[10px] font-bold text-rose-700 uppercase block">Rojo</span>
-              <span className="text-xl font-black text-rose-800 block">
+            <div className="p-1.5 rounded-lg bg-rose-50/80 border border-rose-100">
+              <span className="text-[9px] font-bold text-rose-700 uppercase block">Rojo</span>
+              <span className="text-lg font-black text-rose-800 block">
                 {resumen?.distribucionSemaforos?.rojo ?? 0}
               </span>
             </div>
@@ -314,36 +434,7 @@ export const TableroPrincipal: React.FC = () => {
           </p>
         </Tarjeta>
 
-        {/* KPI 3: Ejecución Presupuestal */}
-        <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Ejecución Presupuestal
-            </span>
-            <DollarSign className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-3">
-            <span className={`text-3xl lg:text-4xl font-black font-mono tracking-tight ${modoPresentacion ? 'text-white' : 'text-slate-900'}`}>
-              {resumen?.financiero?.porcentajeEjecucion != null ? `${resumen.financiero.porcentajeEjecucion}%` : '0%'}
-            </span>
-          </div>
-          <div className="mt-2 text-xs space-y-0.5">
-            <div className="flex justify-between text-slate-400">
-              <span>Ejecutado:</span>
-              <span className={`font-mono font-semibold ${modoPresentacion ? 'text-slate-200' : 'text-slate-800'}`}>
-                {formatMoneda(resumen?.financiero?.totalCostoEjecutado || 0)}
-              </span>
-            </div>
-            <div className="flex justify-between text-slate-400">
-              <span>Apropiación:</span>
-              <span className="font-mono">
-                {formatMoneda(resumen?.financiero?.totalPresupuesto || 0)}
-              </span>
-            </div>
-          </div>
-        </Tarjeta>
-
-        {/* KPI 4: Gestión Operativa de Tareas */}
+        {/* KPI 5: Gestión Operativa de Tareas */}
         <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -352,7 +443,7 @@ export const TableroPrincipal: React.FC = () => {
             <Briefcase className="w-4 h-4 text-institucional-azul" />
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className={`text-3xl lg:text-4xl font-black font-mono tracking-tight ${modoPresentacion ? 'text-white' : 'text-slate-900'}`}>
+            <span className={`text-3xl font-black font-mono tracking-tight ${modoPresentacion ? 'text-white' : 'text-slate-900'}`}>
               {resumen?.operativo?.totalTareas || 0}
             </span>
             <span className="text-xs text-slate-400">actividades</span>
@@ -365,7 +456,7 @@ export const TableroPrincipal: React.FC = () => {
               </span>
             </div>
             <div className="bg-emerald-50 p-1.5 rounded-lg border border-emerald-100">
-              <span className="text-emerald-600 block text-[10px]">Finalizadas</span>
+              <span className="text-emerald-600 block text-[10px]">Finaliz.</span>
               <span className="font-bold text-emerald-700">{resumen?.operativo?.finalizadas || 0}</span>
             </div>
             <div className="bg-rose-50 p-1.5 rounded-lg border border-rose-100">
@@ -374,8 +465,8 @@ export const TableroPrincipal: React.FC = () => {
             </div>
           </div>
           {Boolean(resumen?.operativo?.compromisosDespacho) && (
-            <p className="text-[10px] text-purple-600 font-bold mt-1 text-center">
-              ★ {resumen.operativo.compromisosDespacho} tareas requieren presencia del Despacho
+            <p className="text-[10px] text-purple-600 font-bold mt-1 text-center truncate">
+              ★ {resumen.operativo.compromisosDespacho} presencia Despacho
             </p>
           )}
         </Tarjeta>
@@ -393,7 +484,7 @@ export const TableroPrincipal: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-0.5 bg-blue-500" />
               <span className="text-slate-400">Planeado Acumulado</span>
@@ -406,6 +497,14 @@ export const TableroPrincipal: React.FC = () => {
               <div className="w-2.5 h-2.5 bg-rose-500 rounded-full" />
               <span className="text-rose-600 font-bold">Corte 30-Nov</span>
             </div>
+            {mes && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 bg-purple-500 rounded-full" />
+                <span className="text-purple-600 font-bold">
+                  Mes Filtrado: {MESES.find((m) => m.id === mes)?.nombre}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -435,8 +534,14 @@ export const TableroPrincipal: React.FC = () => {
                     const dataPoint = payload[0].payload;
                     return (
                       <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
-                        <p className="font-bold border-b border-slate-700 pb-1">
-                          Mes de {label} {dataPoint.esFechaCorte ? '(Corte Oficial 30-Nov)' : ''}
+                        <p className="font-bold border-b border-slate-700 pb-1 flex items-center justify-between gap-2">
+                          <span>Mes de {label}</span>
+                          {dataPoint.esFechaCorte && (
+                            <span className="text-rose-400 text-[10px]">(Corte 30-Nov)</span>
+                          )}
+                          {dataPoint.esMesSeleccionado && (
+                            <span className="text-purple-400 text-[10px]">(Mes Filtrado)</span>
+                          )}
                         </p>
                         <p className="text-blue-400">
                           Planeado: <span className="font-bold font-mono">{dataPoint.planeado}%</span>
@@ -473,6 +578,22 @@ export const TableroPrincipal: React.FC = () => {
                   fontWeight: 'bold',
                 }}
               />
+              {/* Línea del Mes Seleccionado en Filtro */}
+              {mes && mes !== 11 && (
+                <ReferenceLine
+                  x={curva[mes - 1]?.nombreMes || String(mes)}
+                  stroke="#8b5cf6"
+                  strokeDasharray="3 3"
+                  strokeWidth={2}
+                  label={{
+                    value: `Filtro: ${MESES.find((m) => m.id === mes)?.nombre}`,
+                    position: 'top',
+                    fill: '#8b5cf6',
+                    fontSize: 11,
+                    fontWeight: 'bold',
+                  }}
+                />
+              )}
               <Line
                 type="monotone"
                 dataKey="planeado"

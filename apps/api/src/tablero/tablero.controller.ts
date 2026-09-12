@@ -26,8 +26,11 @@ export class TableroController {
   }
 
   @Get('desglose-areas')
-  async obtenerDesgloseAreas(@UsuarioActual() usuario: UsuarioAutenticado) {
-    return this.tableroService.obtenerDesgloseAreas(usuario);
+  async obtenerDesgloseAreas(
+    @Query() filtros: FiltrosTableroDto,
+    @UsuarioActual() usuario: UsuarioAutenticado,
+  ) {
+    return this.tableroService.obtenerDesgloseAreas(filtros, usuario);
   }
 
   @Get('alertas-criticas')

@@ -16,7 +16,7 @@ export class ExportacionService {
    * Genera el libro Excel institucional con formato oficial de la Gobernación del Magdalena (CU-12)
    */
   async exportarMetasExcel(
-    filtros: { areaId?: string; componenteId?: string },
+    filtros: { areaId?: string; componenteId?: string; mes?: number },
     usuario: UsuarioAutenticado,
     res: Response,
   ) {
