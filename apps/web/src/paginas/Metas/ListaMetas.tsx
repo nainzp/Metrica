@@ -16,6 +16,8 @@ import {
   FileSpreadsheet,
   Download,
   User,
+  Briefcase,
+  Building2,
 } from 'lucide-react';
 import { api } from '../../api/cliente';
 import { useSesion } from '../../estado/sesion.contexto';
@@ -44,6 +46,22 @@ interface MetaItem {
   brecha: number;
   ultimoMesReportado?: { anio: number; mes: number } | number | null;
   tieneObservacionPendiente?: boolean;
+  programadoTrimestre?: number;
+  ejecutadoTrimestre?: number;
+  costoEjecutadoTrimestre?: number;
+  cumplimientoTrimestre?: number;
+  tieneReporteTrimestre?: boolean;
+  tieneOperador?: boolean;
+  resumenOperador?: {
+    tieneOperador: boolean;
+    totalActividades: number;
+    ejecutadas: number;
+    enEjecucion: number;
+    pendientes: number;
+    aDemanda: number;
+    porcentajeCumplimiento: number | null;
+    estadoPrincipal: 'EJECUTADA' | 'EN_EJECUCION' | 'PENDIENTE' | 'A_DEMANDA';
+  } | null;
 }
 
 export const ListaMetas: React.FC = () => {
@@ -68,6 +86,12 @@ export const ListaMetas: React.FC = () => {
   const [componenteSeleccionado, setComponenteSeleccionado] = useState('');
   const [semaforoFiltro, setSemaforoFiltro] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('');
+  const [trimestreSeleccionado, setTrimestreSeleccionado] = useState<number | ''>('');
+  const [ejecutorFiltro, setEjecutorFiltro] = useState<'TODOS' | 'OPERADOR' | 'SECRETARIA'>('TODOS');
+  const [metaTrimestreInfo, setMetaTrimestreInfo] = useState<{
+    tieneDatosTrimestre?: boolean;
+    mensajeTrimestre?: string | null;
+  }>({});
   const [pagina, setPagina] = useState(1);
   const [tamano] = useState(25);
 
@@ -136,6 +160,8 @@ export const ListaMetas: React.FC = () => {
       if (componenteSeleccionado) params.componenteId = componenteSeleccionado;
       if (semaforoFiltro) params.semaforo = semaforoFiltro;
       if (estadoFiltro) params.estado = estadoFiltro;
+      if (trimestreSeleccionado) params.trimestre = trimestreSeleccionado;
+      if (ejecutorFiltro !== 'TODOS') params.ejecutor = ejecutorFiltro;
 
       if (vistaRapida === 'mis_metas' && usuario?.id) {
         params.responsableId = usuario.id;
@@ -150,6 +176,10 @@ export const ListaMetas: React.FC = () => {
       const res = await api.get('/metas', { params });
       setMetas(res.data.datos || []);
       setTotal(res.data.total || 0);
+      setMetaTrimestreInfo({
+        tieneDatosTrimestre: res.data.tieneDatosTrimestre,
+        mensajeTrimestre: res.data.mensajeTrimestre,
+      });
     } catch (err: any) {
       console.error('Error al consultar metas:', err);
       setError('No fue posible cargar las metas del Plan de Acción.');
@@ -160,7 +190,7 @@ export const ListaMetas: React.FC = () => {
 
   useEffect(() => {
     cargarMetas();
-  }, [pagina, areaSeleccionada, componenteSeleccionado, semaforoFiltro, estadoFiltro, vistaRapida]);
+  }, [pagina, areaSeleccionada, componenteSeleccionado, semaforoFiltro, estadoFiltro, vistaRapida, trimestreSeleccionado, ejecutorFiltro]);
 
   // Debounce para búsqueda por texto
   useEffect(() => {
@@ -418,7 +448,7 @@ export const ListaMetas: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {/* Búsqueda por texto */}
           <div className="relative lg:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -429,6 +459,48 @@ export const ListaMetas: React.FC = () => {
               onChange={(e) => setBusqueda(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-institucional-azul/20 focus:border-institucional-azul"
             />
+          </div>
+
+          {/* Filtro por Trimestre */}
+          <div>
+            <select
+              value={trimestreSeleccionado}
+              onChange={(e) => {
+                setTrimestreSeleccionado(e.target.value ? Number(e.target.value) : '');
+                setPagina(1);
+              }}
+              className="w-full py-2 px-3 text-sm border border-slate-200 rounded-lg bg-white font-medium focus:outline-none focus:ring-2 focus:ring-institucional-azul/20 focus:border-institucional-azul"
+              title="Filtrar por avance trimestral"
+            >
+              <option value="">Todos los Trimestres</option>
+              <option value="1">Trimestre 1 (Ene - Mar)</option>
+              <option value="2">Trimestre 2 (Abr - Jun)</option>
+              <option value="3">Trimestre 3 (Jul - Sep)</option>
+              <option value="4">Trimestre 4 (Oct - Dic)</option>
+            </select>
+          </div>
+
+          {/* Filtro por Modalidad de Ejecución (Operador vs Secretaría) */}
+          <div>
+            <select
+              value={ejecutorFiltro}
+              onChange={(e) => {
+                setEjecutorFiltro(e.target.value as any);
+                setPagina(1);
+              }}
+              className={`w-full py-2 px-3 text-sm border rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-institucional-azul/20 focus:border-institucional-azul ${
+                ejecutorFiltro === 'OPERADOR'
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-bold'
+                  : ejecutorFiltro === 'SECRETARIA'
+                    ? 'bg-slate-100 border-slate-300 text-slate-900 font-bold'
+                    : 'bg-white border-slate-200 text-slate-700'
+              }`}
+              title="Filtrar por modalidad de ejecución (Contrato Operador o Secretaría)"
+            >
+              <option value="TODOS">Todos los Ejecutores (276)</option>
+              <option value="OPERADOR">Contrato Operador (89)</option>
+              <option value="SECRETARIA">Directa Secretaría (187)</option>
+            </select>
           </div>
 
           {/* Filtro por Área */}
@@ -506,10 +578,10 @@ export const ListaMetas: React.FC = () => {
         </div>
 
         {/* Indicadores de filtros activos */}
-        {(busqueda || areaSeleccionada || componenteSeleccionado || semaforoFiltro || estadoFiltro || vistaRapida !== 'todas') && (
+        {(busqueda || areaSeleccionada || componenteSeleccionado || semaforoFiltro || estadoFiltro || trimestreSeleccionado || vistaRapida !== 'todas') && (
           <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
             <span>
-              Filtros activos aplicados {vistaRapida !== 'todas' && `(${vistaRapida === 'mis_metas' ? 'Mis metas' : 'Pendientes de reporte'})`}. Mostrando {metas.length} de {total} metas encontradas.
+              Filtros activos aplicados {trimestreSeleccionado && `(Trimestre ${trimestreSeleccionado}) `}{vistaRapida !== 'todas' && `(${vistaRapida === 'mis_metas' ? 'Mis metas' : 'Pendientes de reporte'})`}. Mostrando {metas.length} de {total} metas encontradas.
             </span>
             <button
               onClick={() => {
@@ -519,6 +591,7 @@ export const ListaMetas: React.FC = () => {
                 setComponenteSeleccionado('');
                 setSemaforoFiltro('');
                 setEstadoFiltro('');
+                setTrimestreSeleccionado('');
                 setPagina(1);
               }}
               className="text-institucional-azul hover:underline font-medium"
@@ -528,6 +601,43 @@ export const ListaMetas: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* BANNER INFORMATIVO CUANDO EL TRIMESTRE SELECCIONADO NO TIENE REPORTES */}
+      {trimestreSeleccionado && metaTrimestreInfo.tieneDatosTrimestre === false && (
+        <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-3.5 shadow-xs animate-fade-in">
+          <div className="p-2 bg-amber-100 rounded-lg text-amber-700 shrink-0 mt-0.5">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-amber-900">
+              Sin reportes registrados para el Trimestre {trimestreSeleccionado}
+            </h4>
+            <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+              {metaTrimestreInfo.mensajeTrimestre || `Actualmente no se registran datos o reportes de avance para el Trimestre ${trimestreSeleccionado}. Las metas presentan avance en cero (0) a la espera del cargue periódico oficial.`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* BANNER INFORMATIVO DE METAS CONTRATADAS CON OPERADOR */}
+      {ejecutorFiltro === 'OPERADOR' && (
+        <div className="bg-indigo-50/90 border-2 border-indigo-200 rounded-xl p-4 flex items-start gap-3.5 shadow-xs animate-fade-in">
+          <div className="p-2 bg-indigo-100 rounded-lg text-indigo-700 shrink-0 mt-0.5">
+            <Briefcase className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+              Metas con Ejecución a Cargo del Operador (Contrato de Gestión 2026)
+              <span className="bg-indigo-200 text-indigo-900 text-[11px] px-2 py-0.5 rounded-full font-mono">
+                {total} Metas
+              </span>
+            </h4>
+            <p className="text-xs text-indigo-800 mt-0.5 leading-relaxed">
+              Estas metas cuentan con actividades programadas y recursos tercerizados a través del operador contratado. La responsabilidad técnico-institucional de reporte y cumplimiento continúa bajo las áreas de la Secretaría de Salud.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabla de Metas */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -556,9 +666,17 @@ export const ListaMetas: React.FC = () => {
                   <th className="py-3 px-4 w-20">Cód.</th>
                   <th className="py-3 px-4 min-w-[280px]">Descripción de la Meta</th>
                   <th className="py-3 px-4">Área / Comp.</th>
+                  <th className="py-3 px-3 text-center">Ejecución</th>
                   <th className="py-3 px-4 text-center">Unidad</th>
                   <th className="py-3 px-4 text-right">Meta</th>
-                  <th className="py-3 px-4 text-right">Ejec. Acum</th>
+                  <th className="py-3 px-4 text-right">
+                    {trimestreSeleccionado ? `Acum. al T${trimestreSeleccionado}` : 'Ejec. Acum'}
+                  </th>
+                  {trimestreSeleccionado && (
+                    <th className="py-3 px-4 text-center bg-blue-50/80 text-blue-900 border-x border-blue-100 font-bold whitespace-nowrap">
+                      Avance T{trimestreSeleccionado}
+                    </th>
+                  )}
                   <th className="py-3 px-4 min-w-[130px] text-center">Avance Indicador</th>
                   <th className="py-3 px-4 text-center">Planeado</th>
                   <th className="py-3 px-4 text-center">Semáforo</th>
@@ -592,7 +710,11 @@ export const ListaMetas: React.FC = () => {
                         {m.responsable ? (
                           <div className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
                             <span>Resp: <span className="text-slate-600">{m.responsable.nombre}</span></span>
-                            {m.ultimoMesReportado ? (
+                            {trimestreSeleccionado ? (
+                              <span className={`font-semibold ${m.tieneReporteTrimestre ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                · {m.tieneReporteTrimestre ? `Reportó en T${trimestreSeleccionado}` : `Sin reporte en T${trimestreSeleccionado}`}
+                              </span>
+                            ) : m.ultimoMesReportado ? (
                               <span className="text-slate-500">
                                 · Últ. rep: Mes {typeof m.ultimoMesReportado === 'object' ? m.ultimoMesReportado.mes : m.ultimoMesReportado}
                               </span>
@@ -615,6 +737,42 @@ export const ListaMetas: React.FC = () => {
                         </div>
                       </td>
 
+                      {/* Ejecución (Operador / Secretaría) */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {m.tieneOperador ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs" title="Ejecutada a través del Contrato de Gestión (Operador 2026)">
+                              <Briefcase className="w-3 h-3 text-indigo-600" />
+                              Operador
+                            </span>
+                            {m.resumenOperador && (
+                              <span className={`text-[9px] font-bold mt-1 px-1.5 py-0.5 rounded ${
+                                m.resumenOperador.estadoPrincipal === 'EJECUTADA'
+                                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                                  : m.resumenOperador.estadoPrincipal === 'EN_EJECUCION'
+                                    ? 'text-blue-700 bg-blue-50 border border-blue-200'
+                                    : m.resumenOperador.estadoPrincipal === 'A_DEMANDA'
+                                      ? 'text-purple-700 bg-purple-50 border border-purple-200'
+                                      : 'text-amber-700 bg-amber-50 border border-amber-200'
+                              }`}>
+                                {m.resumenOperador.estadoPrincipal === 'EJECUTADA'
+                                  ? 'Ejecutada'
+                                  : m.resumenOperador.estadoPrincipal === 'EN_EJECUCION'
+                                    ? 'En ejecución'
+                                    : m.resumenOperador.estadoPrincipal === 'A_DEMANDA'
+                                      ? 'A demanda'
+                                      : 'Pendiente'}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            <Building2 className="w-3 h-3 text-slate-400" />
+                            Secretaría
+                          </span>
+                        )}
+                      </td>
+
                       {/* Unidad */}
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
@@ -631,6 +789,20 @@ export const ListaMetas: React.FC = () => {
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                         {m.valorEjecutadoAcum.toLocaleString()}
                       </td>
+
+                      {/* Avance Trimestre Seleccionado */}
+                      {trimestreSeleccionado && (
+                        <td className="py-3 px-4 text-center bg-blue-50/30 border-x border-blue-100/60 whitespace-nowrap">
+                          <div className="flex flex-col items-center">
+                            <span className="font-mono font-bold text-blue-900 text-xs">
+                              {m.cumplimientoTrimestre != null ? `${m.cumplimientoTrimestre}%` : '0%'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {m.ejecutadoTrimestre ?? 0} / {m.programadoTrimestre ?? 0}
+                            </span>
+                          </div>
+                        </td>
+                      )}
 
                       {/* Avance Indicador con mini barra */}
                       <td className="py-3 px-4 text-center">

@@ -34,6 +34,8 @@ export class MetasController {
     @Query('busqueda') busqueda?: string,
     @Query('sinReporte') sinReporte?: string,
     @Query('mes') mes?: string,
+    @Query('trimestre') trimestre?: string,
+    @Query('ejecutor') ejecutor?: string,
     @Query('pagina') pagina?: number,
     @Query('tamano') tamano?: number,
     @UsuarioActual() usuario?: UsuarioAutenticado,
@@ -51,11 +53,21 @@ export class MetasController {
         busqueda,
         sinReporte: sinReporte === 'true',
         mes: mes ? Number(mes) : undefined,
+        trimestre: trimestre ? Number(trimestre) : undefined,
+        ejecutor,
         pagina,
         tamano,
       },
       usuario!,
     );
+  }
+
+  @Get('metas/:id/operador')
+  async obtenerActividadesOperador(
+    @Param('id') id: string,
+    @UsuarioActual() usuario: UsuarioAutenticado,
+  ) {
+    return this.metasService.obtenerActividadesOperador(id);
   }
 
   @Get('mis-metas/pendientes-reporte')

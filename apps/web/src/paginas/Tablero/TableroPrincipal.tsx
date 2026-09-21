@@ -62,6 +62,8 @@ export const TableroPrincipal: React.FC = () => {
   const [areaId, setAreaId] = useState<string>('');
   const [componenteId, setComponenteId] = useState<string>('');
   const [mes, setMes] = useState<number | ''>('');
+  const [trimestre, setTrimestre] = useState<number | ''>('');
+  const [ejecutor, setEjecutor] = useState<'TODOS' | 'OPERADOR' | 'SECRETARIA'>('TODOS');
   const [modoPresentacion, setModoPresentacion] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
   const [pestanaAlertas, setPestanaAlertas] = useState<'rojas' | 'sinReporte' | 'sobrecosto' | 'vencidas'>('rojas');
@@ -69,12 +71,14 @@ export const TableroPrincipal: React.FC = () => {
 
   // 1. Consulta del Resumen Ejecutivo (CU-11, RN-09, RN-10)
   const { data: resumen, isLoading: cargandoResumen, refetch: refetchResumen } = useQuery({
-    queryKey: ['tablero-resumen', areaId, componenteId, mes],
+    queryKey: ['tablero-resumen', areaId, componenteId, mes, trimestre, ejecutor],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
       if (mes) params.append('mes', String(mes));
+      if (trimestre) params.append('trimestre', String(trimestre));
+      if (ejecutor !== 'TODOS') params.append('ejecutor', ejecutor);
       const { data } = await api.get(`/tablero/resumen?${params.toString()}`);
       return data;
     },
@@ -82,12 +86,14 @@ export const TableroPrincipal: React.FC = () => {
 
   // 2. Consulta de la Curva de Avance 12 Meses (CU-11, 6.6)
   const { data: curva = [], isLoading: cargandoCurva } = useQuery({
-    queryKey: ['tablero-curva', areaId, componenteId, mes],
+    queryKey: ['tablero-curva', areaId, componenteId, mes, trimestre, ejecutor],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
       if (mes) params.append('mes', String(mes));
+      if (trimestre) params.append('trimestre', String(trimestre));
+      if (ejecutor !== 'TODOS') params.append('ejecutor', ejecutor);
       const { data } = await api.get(`/tablero/curva?${params.toString()}`);
       return Array.isArray(data) ? data : [];
     },
@@ -95,10 +101,12 @@ export const TableroPrincipal: React.FC = () => {
 
   // 3. Consulta de Desglose por Áreas y Componentes
   const { data: desgloseAreas = [], isLoading: cargandoDesglose } = useQuery({
-    queryKey: ['tablero-desglose-areas', mes],
+    queryKey: ['tablero-desglose-areas', mes, trimestre, ejecutor],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (mes) params.append('mes', String(mes));
+      if (trimestre) params.append('trimestre', String(trimestre));
+      if (ejecutor !== 'TODOS') params.append('ejecutor', ejecutor);
       const { data } = await api.get(`/tablero/desglose-areas?${params.toString()}`);
       return Array.isArray(data) ? data : [];
     },
@@ -106,12 +114,14 @@ export const TableroPrincipal: React.FC = () => {
 
   // 4. Consulta de Alertas Críticas (CU-11)
   const { data: alertas, isLoading: cargandoAlertas } = useQuery({
-    queryKey: ['tablero-alertas-criticas', areaId, componenteId, mes],
+    queryKey: ['tablero-alertas-criticas', areaId, componenteId, mes, trimestre, ejecutor],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
       if (mes) params.append('mes', String(mes));
+      if (trimestre) params.append('trimestre', String(trimestre));
+      if (ejecutor !== 'TODOS') params.append('ejecutor', ejecutor);
       const { data } = await api.get(`/tablero/alertas-criticas?${params.toString()}`);
       return data;
     },
@@ -132,6 +142,8 @@ export const TableroPrincipal: React.FC = () => {
       if (areaId) params.append('areaId', areaId);
       if (componenteId) params.append('componenteId', componenteId);
       if (mes) params.append('mes', String(mes));
+      if (trimestre) params.append('trimestre', String(trimestre));
+      if (ejecutor !== 'TODOS') params.append('ejecutor', ejecutor);
       const response = await api.get(`/exportacion/metas/excel?${params.toString()}`, {
         responseType: 'blob',
       });
@@ -141,8 +153,8 @@ export const TableroPrincipal: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const sufijoMes = mes ? `_Mes${mes}` : '';
-      link.setAttribute('download', `METRICA_Matriz_Metas_2026${sufijoMes}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const sufijoFiltro = trimestre ? `_Trimestre${trimestre}` : mes ? `_Mes${mes}` : '';
+      link.setAttribute('download', `METRICA_Matriz_Metas_2026${sufijoFiltro}_${new Date().toISOString().slice(0, 10)}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -180,7 +192,12 @@ export const TableroPrincipal: React.FC = () => {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-institucional-azul/10 text-institucional-azul border border-institucional-azul/20">
               Vigencia 2026
             </span>
-            {mes ? (
+            {trimestre ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1 shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                {resumen?.nombreTrimestre || `Trimestre ${trimestre}`}
+              </span>
+            ) : mes ? (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1 shadow-xs">
                 <Calendar className="w-3.5 h-3.5 text-purple-600" />
                 Corte: {MESES.find((m) => m.id === mes)?.nombre} 2026
@@ -198,11 +215,39 @@ export const TableroPrincipal: React.FC = () => {
 
         {/* Controles de Vista y Descarga */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Selector de Trimestre */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={trimestre}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : '';
+                setTrimestre(val);
+                if (val) setMes('');
+              }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all ${
+                modoPresentacion
+                  ? 'bg-slate-800 text-white border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}
+              title="Filtrar avance y cumplimiento por trimestre"
+            >
+              <option value="">Consolidado Anual (Todos)</option>
+              <option value="1">Trimestre 1 (Ene - Mar)</option>
+              <option value="2">Trimestre 2 (Abr - Jun)</option>
+              <option value="3">Trimestre 3 (Jul - Sep)</option>
+              <option value="4">Trimestre 4 (Oct - Dic)</option>
+            </select>
+          </div>
+
           {/* Selector de Mes */}
           <div className="flex items-center gap-1.5">
             <select
               value={mes}
-              onChange={(e) => setMes(e.target.value ? Number(e.target.value) : '')}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : '';
+                setMes(val);
+                if (val) setTrimestre('');
+              }}
               className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all ${
                 modoPresentacion
                   ? 'bg-slate-800 text-white border-slate-700'
@@ -210,12 +255,36 @@ export const TableroPrincipal: React.FC = () => {
               }`}
               title="Filtrar avance y presupuesto por mes de reporte"
             >
-              <option value="">Todo el Año (A la fecha)</option>
+              <option value="">{trimestre ? `Corte Trimestre ${trimestre}` : 'Mes (Todos)'}</option>
               {MESES.map((m) => (
                 <option key={m.id} value={m.id}>
                   Mes {m.id} - {m.nombre}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Selector de Modalidad de Ejecución (Operador vs Secretaría) */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={ejecutor}
+              onChange={(e) => {
+                setEjecutor(e.target.value as any);
+              }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all ${
+                ejecutor === 'OPERADOR'
+                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                  : ejecutor === 'SECRETARIA'
+                    ? 'bg-slate-700 text-white border-slate-800 shadow-xs'
+                    : modoPresentacion
+                      ? 'bg-slate-800 text-white border-slate-700'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}
+              title="Filtrar por modalidad de ejecución (Contrato Operador o Secretaría)"
+            >
+              <option value="TODOS">Consolidado (Todas las 276)</option>
+              <option value="OPERADOR">Solo Contrato Operador (89)</option>
+              <option value="SECRETARIA">Solo Directa Secretaría (187)</option>
             </select>
           </div>
 
@@ -287,6 +356,153 @@ export const TableroPrincipal: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* MENSAJE DE ESTADO VACÍO CUANDO EL TRIMESTRE NO TIENE REPORTES */}
+      {trimestre && resumen?.tieneDatosTrimestre === false && (
+        <div className="bg-amber-50/90 border-2 border-amber-300/80 rounded-2xl p-5 flex items-start gap-4 shadow-sm animate-fade-in">
+          <div className="p-3 bg-amber-100 rounded-xl text-amber-700 shrink-0">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-bold text-amber-900">
+                Sin reportes registrados para el {resumen?.nombreTrimestre || `Trimestre ${trimestre}`}
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-200/80 text-amber-900 uppercase tracking-wider">
+                Periodo Pendiente de Reporte
+              </span>
+            </div>
+            <p className="text-sm text-amber-800 mt-1.5 leading-relaxed">
+              {resumen?.mensajeTrimestre || `No se registran avances o reportes de ejecución periódica para este periodo. Los indicadores trimestrales se presentan en cero (0%) a la espera del reporte oficial de las áreas ejecutoras.`}
+            </p>
+            <div className="mt-3.5 flex flex-wrap items-center gap-4 text-xs font-medium text-amber-800">
+              <span className="inline-flex items-center gap-1.5 bg-amber-100/80 px-2.5 py-1 rounded-lg">
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                Metas con programación en este trimestre: <strong>{resumen?.resumenTrimestre?.metasProgramadas ?? 0}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-amber-100/80 px-2.5 py-1 rounded-lg">
+                <Target className="w-3.5 h-3.5 text-amber-700" />
+                Avance del periodo: <strong>0%</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-amber-100/80 px-2.5 py-1 rounded-lg">
+                <DollarSign className="w-3.5 h-3.5 text-amber-700" />
+                Costo ejecutado en el trimestre: <strong>$0 COP</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BANNER DE RENDIMIENTO DEL TRIMESTRE CUANDO TIENE DATOS */}
+      {trimestre && resumen?.resumenTrimestre && resumen?.tieneDatosTrimestre === true && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white rounded-2xl p-5 shadow-lg border border-blue-900/50 animate-fade-in">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  Desempeño Trimestral
+                </span>
+                <h2 className="text-lg font-bold text-white tracking-tight">
+                  {resumen.nombreTrimestre}
+                </h2>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Monitoreo de cumplimiento físico y ejecución presupuestal devengada en los meses {resumen.mesesTrimestre?.join(', ')}.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-blue-200 font-semibold uppercase tracking-wider">Cumplimiento Trimestre</div>
+                <div className="text-2xl font-black font-mono text-emerald-400 mt-0.5">
+                  {resumen.resumenTrimestre.porcentajeCumplimiento}%
+                </div>
+                <div className="text-[10px] text-slate-300">Sobre metas programadas</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-blue-200 font-semibold uppercase tracking-wider">Programado Periodo</div>
+                <div className="text-xl font-bold font-mono text-white mt-0.5">
+                  {resumen.resumenTrimestre.programadoPeriodo.toLocaleString('es-CO')}
+                </div>
+                <div className="text-[10px] text-slate-300">{resumen.resumenTrimestre.metasProgramadas} metas programadas</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-blue-200 font-semibold uppercase tracking-wider">Ejecutado Periodo</div>
+                <div className="text-xl font-bold font-mono text-cyan-300 mt-0.5">
+                  {resumen.resumenTrimestre.ejecutadoPeriodo.toLocaleString('es-CO')}
+                </div>
+                <div className="text-[10px] text-slate-300">{resumen.resumenTrimestre.metasConReporte} metas reportadas</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-blue-200 font-semibold uppercase tracking-wider">Presupuesto Pagado</div>
+                <div className="text-xl font-bold font-mono text-amber-300 mt-0.5">
+                  {formatMoneda(resumen.resumenTrimestre.costoEjecutadoPeriodo)}
+                </div>
+                <div className="text-[10px] text-slate-300">Efectivamente pagado en el periodo</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BANNER DE RENDIMIENTO DEL CONTRATO DE GESTIÓN (OPERADOR) */}
+      {(ejecutor === 'OPERADOR' || resumen?.ejecutorSeleccionado === 'OPERADOR') && resumen?.resumenContratoOperador && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-500/30 animate-fade-in">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
+                  Contrato de Gestión 2026
+                </span>
+                <h2 className="text-lg font-bold text-white tracking-tight">
+                  Seguimiento a Actividades del Operador
+                </h2>
+              </div>
+              <p className="text-xs text-indigo-200/80 mt-1">
+                Monitoreo del cumplimiento de compromisos y obligaciones tercerizadas para {resumen.resumenContratoOperador.totalMetasAsociadas} metas del Plan de Salud.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-indigo-200 font-semibold uppercase tracking-wider">Cumplimiento Contrato</div>
+                <div className="text-2xl font-black font-mono text-emerald-400 mt-0.5">
+                  {resumen.resumenContratoOperador.porcentajeAvanceContrato}%
+                </div>
+                <div className="text-[10px] text-slate-300">Ponderado actividades</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-indigo-200 font-semibold uppercase tracking-wider">Actividades Totales</div>
+                <div className="text-xl font-bold font-mono text-white mt-0.5">
+                  {resumen.resumenContratoOperador.totalActividades}
+                </div>
+                <div className="text-[10px] text-slate-300">En 89 metas asignadas</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-indigo-200 font-semibold uppercase tracking-wider">Ejecutadas / En Curso</div>
+                <div className="text-xl font-bold font-mono text-cyan-300 mt-0.5">
+                  {resumen.resumenContratoOperador.ejecutadas} <span className="text-xs font-normal text-slate-300">({resumen.resumenContratoOperador.enEjecucion} en curso)</span>
+                </div>
+                <div className="text-[10px] text-slate-300">{resumen.resumenContratoOperador.aDemanda} a demanda</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[11px] text-indigo-200 font-semibold uppercase tracking-wider">Actividades Pendientes</div>
+                <div className="text-xl font-bold font-mono text-amber-300 mt-0.5">
+                  {resumen.resumenContratoOperador.pendientes}
+                </div>
+                <div className="text-[10px] text-slate-300">Programadas Sep - Dic</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TARJETAS KPI DE ALTO NIVEL CON PRESUPUESTO PROGRAMADO Y EJECUTADO (RN-09, RN-10, CU-11) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -365,11 +581,11 @@ export const TableroPrincipal: React.FC = () => {
           </p>
         </Tarjeta>
 
-        {/* KPI 3: Presupuesto Ejecutado */}
+        {/* KPI 3: Presupuesto Pagado */}
         <Tarjeta className={`${modoPresentacion ? 'bg-slate-800/90 border-slate-700 text-white' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Presupuesto Ejecutado
+              Presupuesto Pagado
             </span>
             <div className="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
               <TrendingUp className="w-3.5 h-3.5" />
@@ -385,10 +601,10 @@ export const TableroPrincipal: React.FC = () => {
           </div>
           <div className="mt-2 text-xs flex items-center justify-between">
             <span className="text-slate-400">
-              {mes ? `Corte: ${MESES.find((m) => m.id === mes)?.nombre}` : 'A la fecha'}
+              {trimestre ? (resumen?.nombreTrimestre || `Trimestre ${trimestre}`) : mes ? `Corte: ${MESES.find((m) => m.id === mes)?.nombre}` : 'Efectivamente pagado'}
             </span>
             <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-mono">
-              {resumen?.financiero?.porcentajeEjecucion != null ? `${resumen.financiero.porcentajeEjecucion}%` : '0%'} ejec.
+              {resumen?.financiero?.porcentajeEjecucion != null ? `${resumen.financiero.porcentajeEjecucion}%` : '0%'} pagado
             </span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">

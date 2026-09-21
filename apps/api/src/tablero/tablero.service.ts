@@ -22,26 +22,40 @@ export class TableroService {
    * Obtiene el resumen ejecutivo de alto nivel para la Secretaria y Directivos (CU-11, RN-09, RN-10)
    */
   async obtenerResumenEjecutivo(
-    filtros: { areaId?: string; componenteId?: string; mes?: number },
+    filtros: { areaId?: string; componenteId?: string; mes?: number; trimestre?: number; ejecutor?: string },
     usuario: UsuarioAutenticado,
   ) {
+    const trim =
+      filtros.trimestre && Number(filtros.trimestre) >= 1 && Number(filtros.trimestre) <= 4
+        ? Number(filtros.trimestre)
+        : null;
+    const mesesDelTrimestre = trim
+      ? [(trim - 1) * 3 + 1, (trim - 1) * 3 + 2, (trim - 1) * 3 + 3]
+      : null;
+    const mesReferencia = trim
+      ? trim * 3
+      : filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
+        ? Number(filtros.mes)
+        : null;
+
     const metasData = await this.metasService.listar(
       {
         areaId: filtros.areaId,
         componenteId: filtros.componenteId,
-        mes: filtros.mes,
+        mes: mesReferencia || undefined,
+        trimestre: trim || undefined,
+        ejecutor: filtros.ejecutor,
         tamano: 400,
       },
       usuario,
     );
 
     const metas = metasData.datos;
-    const hoy =
-      filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
-        ? new Date(Date.UTC(2026, Number(filtros.mes), 0, 23, 59, 59, 999))
-        : obtenerHoyBogota();
-    const mesReferencia = hoy.getUTCMonth() + 1;
-    const anioReferencia = hoy.getUTCFullYear();
+    const hoy = mesReferencia
+      ? new Date(Date.UTC(2026, mesReferencia, 0, 23, 59, 59, 999))
+      : obtenerHoyBogota();
+    const mesActual = hoy.getUTCMonth() + 1;
+    const anioActual = hoy.getUTCFullYear();
 
     // Adaptar a MetaParaAgregados
     const metasParaAgregados: MetaParaAgregados[] = metas.map((m: any) => ({
@@ -53,7 +67,7 @@ export class TableroService {
       presupuestoProgramado: Number(m.presupuestoProgramado) || 0,
       costoEjecutadoAcum: Number(m.costoEjecutadoAcum) || 0,
       tieneReporteMesActual: Boolean(
-        m.reportes?.some((r: any) => r.anio === anioReferencia && r.mes === mesReferencia),
+        m.reportes?.some((r: any) => r.anio === anioActual && r.mes === mesActual),
       ),
       totalTareas: m.tareas?.length || 0,
       tareasFinalizadas: m.tareas?.filter((t: any) => t.estado === EstadoTarea.FINALIZADA).length || 0,
@@ -61,6 +75,48 @@ export class TableroService {
     }));
 
     const resumen = calcularResumenAgregado(metasParaAgregados);
+
+    // Cálculos específicos de periodo para el Trimestre
+    let totalProgramadoTrimestre = 0;
+    let totalEjecutadoTrimestre = 0;
+    let totalCostoEjecutadoTrimestre = 0;
+    let metasProgramadasEnTrimestre = 0;
+    let metasConReporteEnTrimestre = 0;
+    let sumaCumplimientoPorcentual = 0;
+    let tieneReportesEnTrimestre = false;
+
+    if (trim && mesesDelTrimestre) {
+      for (const m of metas) {
+        if (m.estado === EstadoMeta.PENDIENTE_COMPLETAR) continue;
+
+        const valorProg = Number(m.programadoTrimestre) || 0;
+        const valorEjec = Number(m.ejecutadoTrimestre) || 0;
+        const costoEjec = Number(m.costoEjecutadoTrimestre) || 0;
+
+        if (m.tieneReporteTrimestre) {
+          tieneReportesEnTrimestre = true;
+          metasConReporteEnTrimestre++;
+        }
+
+        totalProgramadoTrimestre += valorProg;
+        totalEjecutadoTrimestre += valorEjec;
+        totalCostoEjecutadoTrimestre += costoEjec;
+
+        if (valorProg > 0) {
+          metasProgramadasEnTrimestre++;
+          const cumplimiento = Math.min(100, Math.max(0, (valorEjec / valorProg) * 100));
+          sumaCumplimientoPorcentual += cumplimiento;
+        } else if (valorEjec > 0) {
+          metasProgramadasEnTrimestre++;
+          sumaCumplimientoPorcentual += 100;
+        }
+      }
+    }
+
+    const promedioCumplimientoTrimestre =
+      metasProgramadasEnTrimestre > 0
+        ? Math.round((sumaCumplimientoPorcentual / metasProgramadasEnTrimestre) * 10) / 10
+        : 0;
 
     // Consulta consolidada de tareas para KPIs operativos
     const whereTareas: any = {
@@ -71,17 +127,77 @@ export class TableroService {
     if (filtros.areaId) whereTareas.meta.areaId = filtros.areaId;
     if (filtros.componenteId) whereTareas.meta.componenteId = filtros.componenteId;
 
-    const [conteoProgramadas, conteoEnCurso, conteoVencidas, conteoFinalizadas, conteoDespacho] = await Promise.all([
+    const [
+      conteoProgramadas,
+      conteoEnCurso,
+      conteoVencidas,
+      conteoFinalizadas,
+      conteoDespacho,
+      actividadesOpTotal,
+      actividadesOpPorEstado,
+      metasConOperadorTotal,
+    ] = await Promise.all([
       this.prisma.tarea.count({ where: { ...whereTareas, estado: EstadoTarea.PROGRAMADA } }),
       this.prisma.tarea.count({ where: { ...whereTareas, estado: EstadoTarea.EN_CURSO } }),
       this.prisma.tarea.count({ where: { ...whereTareas, estado: EstadoTarea.VENCIDA } }),
       this.prisma.tarea.count({ where: { ...whereTareas, estado: EstadoTarea.FINALIZADA } }),
       this.prisma.tarea.count({ where: { ...whereTareas, requiereSecretaria: true } }),
+      this.prisma.actividadOperador.count(),
+      this.prisma.actividadOperador.groupBy({
+        by: ['estado'],
+        _count: true,
+      }),
+      this.prisma.meta.count({ where: { tieneOperador: true } }),
     ]);
 
+    const conteoOp: Record<string, number> = {};
+    actividadesOpPorEstado.forEach((g: any) => {
+      conteoOp[g.estado] = g._count;
+    });
+
+    const resumenContratoOperador = {
+      totalActividades: actividadesOpTotal,
+      ejecutadas: conteoOp['EJECUTADA'] || 0,
+      enEjecucion: conteoOp['EN_EJECUCION'] || 0,
+      pendientes: conteoOp['PENDIENTE'] || 0,
+      aDemanda: conteoOp['A_DEMANDA'] || 0,
+      totalMetasAsociadas: metasConOperadorTotal,
+      porcentajeAvanceContrato:
+        actividadesOpTotal > 0
+          ? Math.round((((conteoOp['EJECUTADA'] || 0) + (conteoOp['EN_EJECUCION'] || 0) * 0.5) / actividadesOpTotal) * 1000) / 10
+          : 0,
+    };
+
+    const nombresTrimestres: Record<number, string> = {
+      1: 'Trimestre 1 (Enero - Marzo)',
+      2: 'Trimestre 2 (Abril - Junio)',
+      3: 'Trimestre 3 (Julio - Septiembre)',
+      4: 'Trimestre 4 (Octubre - Diciembre)',
+    };
+
     return {
+      ejecutorSeleccionado: filtros.ejecutor || 'TODOS',
+      resumenContratoOperador,
       mesSeleccionado: filtros.mes ? Number(filtros.mes) : null,
-      mesReferencia,
+      trimestreSeleccionado: trim,
+      nombreTrimestre: trim ? nombresTrimestres[trim] : null,
+      mesesTrimestre: mesesDelTrimestre,
+      tieneDatosTrimestre: trim ? tieneReportesEnTrimestre : true,
+      mensajeTrimestre:
+        trim && !tieneReportesEnTrimestre
+          ? `Sin reportes: No se registran avances o reportes periódicos para el ${nombresTrimestres[trim]}. Los indicadores trimestrales se presentan en 0% a la espera del cargue de información.`
+          : null,
+      resumenTrimestre: trim
+        ? {
+            programadoPeriodo: Math.round(totalProgramadoTrimestre * 100) / 100,
+            ejecutadoPeriodo: Math.round(totalEjecutadoTrimestre * 100) / 100,
+            costoEjecutadoPeriodo: totalCostoEjecutadoTrimestre,
+            porcentajeCumplimiento: promedioCumplimientoTrimestre,
+            metasProgramadas: metasProgramadasEnTrimestre,
+            metasConReporte: metasConReporteEnTrimestre,
+          }
+        : null,
+      mesReferencia: mesActual,
       avanceGlobalFisico: resumen.promedioAvanceIndicador,
       avanceGlobalPlaneado: resumen.promedioAvancePlaneado,
       semaforoGlobal: resumen.semaforoGlobal,
@@ -122,7 +238,7 @@ export class TableroService {
    * Genera los 12 puntos de la curva de avance mensual acumulado (CU-11, 6.6)
    */
   async obtenerCurvaAvance(
-    filtros: { areaId?: string; componenteId?: string; mes?: number },
+    filtros: { areaId?: string; componenteId?: string; mes?: number; trimestre?: number; ejecutor?: string },
     usuario: UsuarioAutenticado,
   ) {
     const where: any = {};
@@ -134,6 +250,12 @@ export class TableroService {
     }
     if (filtros.areaId) where.areaId = filtros.areaId;
     if (filtros.componenteId) where.componenteId = filtros.componenteId;
+
+    if (filtros.ejecutor === 'OPERADOR') {
+      where.tieneOperador = true;
+    } else if (filtros.ejecutor === 'SECRETARIA') {
+      where.tieneOperador = false;
+    }
 
     const metas = await this.prisma.meta.findMany({
       where,
@@ -168,12 +290,21 @@ export class TableroService {
     const mesActual = hoy.getUTCFullYear() === 2026 ? hoy.getUTCMonth() + 1 : 12;
     const mesFiltro = filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12 ? Number(filtros.mes) : null;
 
+    const trim =
+      filtros.trimestre && Number(filtros.trimestre) >= 1 && Number(filtros.trimestre) <= 4
+        ? Number(filtros.trimestre)
+        : null;
+    const mesesTrimestre = trim
+      ? [(trim - 1) * 3 + 1, (trim - 1) * 3 + 2, (trim - 1) * 3 + 3]
+      : null;
+
     const puntos = generarCurvaAvanceMensual(metasParaCurva, 2026, mesActual);
 
     return puntos.map((p) => ({
       ...p,
       esMesActual: p.mes === mesActual,
       esMesSeleccionado: p.mes === mesFiltro,
+      esTrimestreSeleccionado: mesesTrimestre ? mesesTrimestre.includes(p.mes) : false,
       esFechaCorte: p.mes === 11, // 30 de noviembre de 2026
     }));
   }
@@ -182,26 +313,33 @@ export class TableroService {
    * Desglose del avance físico por área y componente para gráficos de barras y drill-down
    */
   async obtenerDesgloseAreas(
-    filtros: { mes?: number } = {},
+    filtros: { mes?: number; trimestre?: number; ejecutor?: string },
     usuario: UsuarioAutenticado,
   ) {
     const areas = await this.prisma.area.findMany({
       where: { activo: true },
-      include: {
-        componentes: { where: { activo: true }, orderBy: { codigo: 'asc' } },
-      },
+      include: { componentes: { where: { activo: true } } },
       orderBy: { nombre: 'asc' },
     });
 
+    const trim =
+      filtros?.trimestre && Number(filtros.trimestre) >= 1 && Number(filtros.trimestre) <= 4
+        ? Number(filtros.trimestre)
+        : null;
+    const mesReferenciaNum = trim
+      ? trim * 3
+      : filtros?.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
+        ? Number(filtros.mes)
+        : undefined;
+
     const metasData = await this.metasService.listar(
-      { tamano: 400, mes: filtros?.mes },
+      { tamano: 400, mes: mesReferenciaNum, trimestre: trim || undefined, ejecutor: filtros.ejecutor },
       usuario,
     );
     const metasEnriquecidas = metasData.datos;
-    const hoy =
-      filtros?.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
-        ? new Date(Date.UTC(2026, Number(filtros.mes), 0, 23, 59, 59, 999))
-        : obtenerHoyBogota();
+    const hoy = mesReferenciaNum
+      ? new Date(Date.UTC(2026, mesReferenciaNum, 0, 23, 59, 59, 999))
+      : obtenerHoyBogota();
     const mesReferencia = hoy.getUTCMonth() + 1;
     const anioReferencia = hoy.getUTCFullYear();
 
@@ -289,23 +427,34 @@ export class TableroService {
    * Obtiene las alertas operativas y gerenciales críticas (metas rojas, sin reporte, tareas vencidas, sobrecosto)
    */
   async obtenerAlertasCriticas(
-    filtros: { areaId?: string; componenteId?: string; mes?: number },
+    filtros: { areaId?: string; componenteId?: string; mes?: number; trimestre?: number; ejecutor?: string },
     usuario: UsuarioAutenticado,
   ) {
+    const trim =
+      filtros?.trimestre && Number(filtros.trimestre) >= 1 && Number(filtros.trimestre) <= 4
+        ? Number(filtros.trimestre)
+        : null;
+    const mesReferenciaNum = trim
+      ? trim * 3
+      : filtros?.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
+        ? Number(filtros.mes)
+        : undefined;
+
     const metasData = await this.metasService.listar(
       {
         areaId: filtros.areaId,
         componenteId: filtros.componenteId,
-        mes: filtros.mes,
+        mes: mesReferenciaNum,
+        trimestre: trim || undefined,
+        ejecutor: filtros.ejecutor,
         tamano: 400,
       },
       usuario,
     );
 
-    const hoy =
-      filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
-        ? new Date(Date.UTC(2026, Number(filtros.mes), 0, 23, 59, 59, 999))
-        : obtenerHoyBogota();
+    const hoy = mesReferenciaNum
+      ? new Date(Date.UTC(2026, mesReferenciaNum, 0, 23, 59, 59, 999))
+      : obtenerHoyBogota();
     const mesActual = hoy.getUTCMonth() + 1;
     const anioActual = hoy.getUTCFullYear();
     const metas = metasData.datos;

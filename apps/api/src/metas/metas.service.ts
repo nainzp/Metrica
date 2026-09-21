@@ -32,7 +32,7 @@ export class MetasService {
   /**
    * Enriquece una entidad Meta con todos los campos calculados normativos (sección 4.2 y 6)
    */
-  enriquecerMeta(meta: any, hoy = obtenerHoyBogota(), umbralAmarillo = 15) {
+  enriquecerMeta(meta: any, hoy = obtenerHoyBogota(), umbralAmarillo = 15, trimestre?: number) {
     const valorMeta = Number(meta.valorMeta) || 0;
     const esBinaria = Boolean(meta.unidad?.esBinaria);
 
@@ -122,8 +122,111 @@ export class MetasService {
     const sobrePresupuesto = tieneGastoSobrePresupuesto(presupuesto, costoEjecutadoAcum);
     const sobreAvance = tieneGastoSobreAvance(presupuesto, costoEjecutadoAcum, avanceIndicador);
 
+    // Cálculo específico de Trimestre (si se solicita)
+    let datosTrimestre: any = null;
+    let programadoTrimestre = 0;
+    let ejecutadoTrimestre = 0;
+    let costoEjecutadoTrimestre = 0;
+    let cumplimientoTrimestre = 0;
+    let tieneReporteTrimestre = false;
+
+    if (trimestre && trimestre >= 1 && trimestre <= 4) {
+      const mesesTrim = [(trimestre - 1) * 3 + 1, (trimestre - 1) * 3 + 2, (trimestre - 1) * 3 + 3];
+      const progsTrim = (meta.programaciones || []).filter(
+        (p: any) => p.anio === 2026 && mesesTrim.includes(p.mes),
+      );
+      const repsTrim = (meta.reportes || []).filter(
+        (r: any) => r.anio === 2026 && mesesTrim.includes(r.mes),
+      );
+
+      programadoTrimestre = progsTrim.reduce(
+        (acc: number, p: any) => acc + (Number(p.valorProgramado) || 0),
+        0,
+      );
+      ejecutadoTrimestre = repsTrim.reduce(
+        (acc: number, r: any) => acc + (Number(r.valorEjecutado) || 0),
+        0,
+      );
+      costoEjecutadoTrimestre = repsTrim.reduce(
+        (acc: number, r: any) => acc + (Number(r.costoEjecutado) || 0),
+        0,
+      );
+
+      if (esBinaria) {
+        const pctBin = repsTrim
+          .filter((r: any) => r.porcentajeBinario != null)
+          .map((r: any) => Number(r.porcentajeBinario));
+        if (pctBin.length > 0) {
+          ejecutadoTrimestre = Math.max(...pctBin);
+        }
+      }
+
+      if (programadoTrimestre > 0) {
+        cumplimientoTrimestre = Math.min(
+          100,
+          Math.round((ejecutadoTrimestre / programadoTrimestre) * 1000) / 10,
+        );
+      } else if (ejecutadoTrimestre > 0) {
+        cumplimientoTrimestre = 100;
+      }
+
+      tieneReporteTrimestre =
+        repsTrim.length > 0 &&
+        (ejecutadoTrimestre > 0 ||
+          costoEjecutadoTrimestre > 0 ||
+          repsTrim.some((r: any) => r.porcentajeBinario != null));
+
+      datosTrimestre = {
+        trimestre,
+        meses: mesesTrim,
+        programadoTrimestre: Math.round(programadoTrimestre * 100) / 100,
+        ejecutadoTrimestre: Math.round(ejecutadoTrimestre * 100) / 100,
+        costoEjecutadoTrimestre,
+        cumplimientoTrimestre,
+        tieneReporteTrimestre,
+      };
+    }
+
+    // Resumen Operador (Contrato de Gestión)
+    const tieneOperador = Boolean(meta.tieneOperador);
+    const actividadesOp = meta.actividadesOperador || [];
+    const totalActividadesOp = actividadesOp.length;
+    const actividadesEjecutadasOp = actividadesOp.filter((a: any) => a.estado === 'EJECUTADA').length;
+    const actividadesEnEjecucionOp = actividadesOp.filter((a: any) => a.estado === 'EN_EJECUCION').length;
+    const actividadesPendientesOp = actividadesOp.filter((a: any) => a.estado === 'PENDIENTE').length;
+    const actividadesADemandaOp = actividadesOp.filter((a: any) => a.estado === 'A_DEMANDA').length;
+    const porcentajeOperador = totalActividadesOp > 0
+      ? Math.round(
+          (actividadesOp.reduce((sum: number, a: any) => sum + (Number(a.porcentajeCumplimiento) || 0), 0) /
+            totalActividadesOp) *
+            10,
+        ) / 10
+      : null;
+
+    const resumenOperador = tieneOperador
+      ? {
+          tieneOperador: true,
+          totalActividades: totalActividadesOp,
+          ejecutadas: actividadesEjecutadasOp,
+          enEjecucion: actividadesEnEjecucionOp,
+          pendientes: actividadesPendientesOp,
+          aDemanda: actividadesADemandaOp,
+          porcentajeCumplimiento: porcentajeOperador,
+          estadoPrincipal:
+            actividadesEjecutadasOp === totalActividadesOp && totalActividadesOp > 0
+              ? 'EJECUTADA'
+              : actividadesEnEjecucionOp > 0
+                ? 'EN_EJECUCION'
+                : actividadesADemandaOp > 0 && actividadesEjecutadasOp === 0 && actividadesPendientesOp === 0
+                  ? 'A_DEMANDA'
+                  : 'PENDIENTE',
+        }
+      : null;
+
     return {
       ...meta,
+      tieneOperador,
+      resumenOperador,
       valorMeta,
       presupuestoProgramado: presupuesto,
       valorEjecutadoAcum,
@@ -140,6 +243,12 @@ export class MetasService {
       tieneObservacionPendiente,
       sobrePresupuesto,
       sobreAvance,
+      datosTrimestre,
+      programadoTrimestre,
+      ejecutadoTrimestre,
+      costoEjecutadoTrimestre,
+      cumplimientoTrimestre,
+      tieneReporteTrimestre,
     };
   }
 
@@ -161,6 +270,8 @@ export class MetasService {
       pagina?: number;
       tamano?: number;
       mes?: number;
+      trimestre?: number;
+      ejecutor?: string;
     },
     usuario: UsuarioAutenticado,
   ) {
@@ -186,6 +297,12 @@ export class MetasService {
     if (filtros.poblacionId) where.poblacionSujetoId = filtros.poblacionId;
     if (filtros.unidadId) where.unidadId = filtros.unidadId;
 
+    if (filtros.ejecutor === 'OPERADOR') {
+      where.tieneOperador = true;
+    } else if (filtros.ejecutor === 'SECRETARIA') {
+      where.tieneOperador = false;
+    }
+
     if (filtros.busqueda) {
       where.OR = [
         { codigo: { contains: filtros.busqueda, mode: 'insensitive' } },
@@ -208,6 +325,7 @@ export class MetasService {
           reportes: { orderBy: [{ anio: 'asc' }, { mes: 'asc' }] },
           tareas: { select: { id: true, estado: true } },
           observaciones: { select: { id: true, atendida: true } },
+          actividadesOperador: true,
         },
         orderBy: [{ area: { nombre: 'asc' } }, { codigo: 'asc' }],
         skip,
@@ -215,11 +333,22 @@ export class MetasService {
       }),
     ]);
 
-    const hoy =
-      filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
-        ? new Date(Date.UTC(2026, Number(filtros.mes), 0, 23, 59, 59, 999))
-        : obtenerHoyBogota();
-    let metasEnriquecidas = metasDb.map((m) => this.enriquecerMeta(m, hoy));
+    const trim =
+      filtros.trimestre && Number(filtros.trimestre) >= 1 && Number(filtros.trimestre) <= 4
+        ? Number(filtros.trimestre)
+        : null;
+    const mesEfectivo = trim
+      ? trim * 3
+      : filtros.mes && Number(filtros.mes) >= 1 && Number(filtros.mes) <= 12
+        ? Number(filtros.mes)
+        : null;
+
+    const hoy = mesEfectivo
+      ? new Date(Date.UTC(2026, mesEfectivo, 0, 23, 59, 59, 999))
+      : obtenerHoyBogota();
+    let metasEnriquecidas = metasDb.map((m) =>
+      this.enriquecerMeta(m, hoy, 15, trim || undefined),
+    );
 
     if (filtros.semaforo) {
       metasEnriquecidas = metasEnriquecidas.filter(
@@ -237,11 +366,21 @@ export class MetasService {
       );
     }
 
+    const tieneDatosTrimestre = trim
+      ? metasEnriquecidas.some((m) => m.tieneReporteTrimestre)
+      : true;
+
     return {
       datos: metasEnriquecidas,
       total,
       pagina,
       tamano,
+      trimestreSeleccionado: trim,
+      tieneDatosTrimestre,
+      mensajeTrimestre:
+        trim && !tieneDatosTrimestre
+          ? `Sin reportes: No se registran avances o reportes periódicos para el Trimestre ${trim}.`
+          : null,
     };
   }
 
@@ -281,12 +420,25 @@ export class MetasService {
           },
           orderBy: { creadoEn: 'desc' },
         },
+        actividadesOperador: {
+          orderBy: { consecutivo: 'asc' },
+        },
       },
     });
 
     if (!meta) throw new NotFoundException('Meta no encontrada');
 
     return this.enriquecerMeta(meta);
+  }
+
+  /**
+   * Obtiene la lista de actividades del operador asignadas a una meta
+   */
+  async obtenerActividadesOperador(metaId: string) {
+    return this.prisma.actividadOperador.findMany({
+      where: { metaId },
+      orderBy: { consecutivo: 'asc' },
+    });
   }
 
   /**

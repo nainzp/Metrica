@@ -218,6 +218,7 @@ model Meta {
   poblacionSujetoId       String?            @map("poblacion_sujeto_id") @db.Uuid
   estado                  EstadoMeta         @default(PENDIENTE_COMPLETAR)
   distribucionUniforme    Boolean            @default(true) @map("distribucion_uniforme")
+  tieneOperador           Boolean            @default(false) @map("tiene_operador")
   observacionesImportacion String?           @map("observaciones_importacion") @db.Text
   esDatoPrueba            Boolean            @default(false) @map("es_dato_prueba")
   creadoEn                DateTime           @default(now()) @map("creado_en") @db.Timestamptz
@@ -235,6 +236,7 @@ model Meta {
   reportes                ReporteMensual[]
   tareas                  Tarea[]
   observaciones           Observacion[]
+  actividadesOperador     ActividadOperador[]
 
   @@index([areaId, componenteId, estado])
   @@index([responsableId])
@@ -435,5 +437,29 @@ model Auditoria {
   @@index([entidad, entidadId])
   @@index([fecha(sort: Desc)])
   @@map("auditoria")
+  @@schema("metrica")
+}
+
+model ActividadOperador {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consecutivo            Int
+  metaId                 String    @map("meta_id") @db.Uuid
+  actividad              String    @db.Text
+  obligacion             String?   @db.Text
+  soportesVerificacion   String?   @map("soportes_verificacion") @db.Text
+  resumenCompromiso      String?   @map("resumen_compromiso") @db.Text
+  denominador            Decimal?  @db.Decimal(14, 2)
+  numerador              Decimal?  @db.Decimal(14, 2)
+  porcentajeCumplimiento Decimal?  @map("porcentaje_cumplimiento") @db.Decimal(5, 2)
+  estado                 String    @db.VarChar(50)
+  observaciones          String?   @db.Text
+  cronograma             Json?     @db.JsonB
+  creadoEn               DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn          DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  meta                   Meta      @relation(fields: [metaId], references: [id], onDelete: Cascade)
+
+  @@index([metaId])
+  @@map("actividad_operador")
   @@schema("metrica")
 }
